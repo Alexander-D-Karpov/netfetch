@@ -1,0 +1,21 @@
+{
+  "distro_name": "LangitKetujuh",
+  "colors": "7 4",
+  "ascii_art": [
+    "${c1}",
+    "   L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L",
+    "      'L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L",
+    "   L7L.   'L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L",
+    "   L7L7L7L                             L7L7L7L",
+    "   L7L7L7L                             L7L7L7L",
+    "   L7L7L7L             L7L7L7L7L7L7L7L7L7L7L7L",
+    "   L7L7L7L                'L7L7L7L7L7L7L7L7L7L",
+    "   L7L7L7L                    'L7L7L7L7L7L7L7L",
+    "   L7L7L7L                             L7L7L7L",
+    "   L7L7L7L                             L7L7L7L",
+    "   L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L.   'L7L",
+    "   L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L.",
+    "   L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L7L",
+    "${c2}"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "distro_name": "DracOS",
+  "colors": "1 7 3",
+  "ascii_art": [
+    "${c1}       `-:/-",
+    "          -os:",
+    "            -os/`",
+    "              :sy+-`",
+    "               `/yyyy+.",
+    "                 `+yyyyo-",
+    "                   `/yyyys:",
+    "`:osssoooo++-        +yyyyyy/`",
+    "   ./yyyyyyo         yo`:syyyy+.",
+    "      -oyyy+         +-   :yyyyyo-",
+    "        `:sy:        `.    `/yyyyys:",
+    "           ./o/.`           .oyyso+oo:`",
+    "              :+oo+//::::///:-.`     `.`"
+  ]
+}

@@ -1,0 +1,14 @@
+# Server configuration
+listen_address: ":3000"
+
+# Active modules
+active_modules:
+  - os
+  - cpu
+  - memory
+  - disk
+  - network
+
+# Logo configuration
+default_logo: "tux"
+logo_dir: "./logos"

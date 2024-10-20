@@ -1,0 +1,23 @@
+{
+  "distro_name": "Zorin",
+  "colors": "4 6",
+  "ascii_art": [
+    "${c1}        `osssssssssssssssssssso`",
+    "       .osssssssssssssssssssssso.",
+    "      .+oooooooooooooooooooooooo+.",
+    "",
+    "",
+    "  `::::::::::::::::::::::.         .:`",
+    " `+ssssssssssssssssss+:.`     `.:+ssso`",
+    ".ossssssssssssssso/.       `-+ossssssso.",
+    "ssssssssssssso/-`      `-/osssssssssssss",
+    ".ossssssso/-`      .-/ossssssssssssssso.",
+    " `+sss+:.      `.:+ssssssssssssssssss+`",
+    "  `:.         .::::::::::::::::::::::`",
+    "",
+    "",
+    "      .+oooooooooooooooooooooooo+.",
+    "       -osssssssssssssssssssssso-",
+    "        `osssssssssssssssssssso`"
+  ]
+}

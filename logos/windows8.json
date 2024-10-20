@@ -1,0 +1,25 @@
+{
+  "distro_name": "windows8",
+  "colors": "6 7",
+  "ascii_art": [
+    "${c1}                                ..,",
+    "                    ....,,:;+ccllll",
+    "      ...,,+:;  cllllllllllllllllll",
+    ",cclllllllllll  lllllllllllllllllll",
+    "llllllllllllll  lllllllllllllllllll",
+    "llllllllllllll  lllllllllllllllllll",
+    "llllllllllllll  lllllllllllllllllll",
+    "llllllllllllll  lllllllllllllllllll",
+    "llllllllllllll  lllllllllllllllllll",
+    "",
+    "llllllllllllll  lllllllllllllllllll",
+    "llllllllllllll  lllllllllllllllllll",
+    "llllllllllllll  lllllllllllllllllll",
+    "llllllllllllll  lllllllllllllllllll",
+    "llllllllllllll  lllllllllllllllllll",
+    "`'ccllllllllll  lllllllllllllllllll",
+    "       `' \\\\*::  :ccllllllllllllllll",
+    "                       ````''*::cll",
+    "                                 ``"
+  ]
+}

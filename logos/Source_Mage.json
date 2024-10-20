@@ -1,0 +1,27 @@
+{
+  "distro_name": "Source_Mage",
+  "colors": "4 7 1",
+  "ascii_art": [
+    "${c2}       :ymNMNho.",
+    ".+sdmNMMMMMMMMMMy`",
+    ".-::/yMMMMMMMMMMMm-",
+    "      sMMMMMMMMMMMm/",
+    "     /NMMMMMMMMMMMMMm:",
+    "    .MMMMMMMMMMMMMMMMM:",
+    "    `MMMMMMMMMMMMMMMMMN.",
+    "     NMMMMMMMMMMMMMMMMMd",
+    "     mMMMMMMMMMMMMMMMMMMo",
+    "     hhMMMMMMMMMMMMMMMMMM.",
+    "     .`/MMMMMMMMMMMMMMMMMs",
+    "        :mMMMMMMMMMMMMMMMN`",
+    "         `sMMMMMMMMMMMMMMM+",
+    "           /NMMMMMMMMMMMMMN`",
+    "             oMMMMMMMMMMMMM+",
+    "          ./sd.-hMMMMMMMMmmN`",
+    "      ./+oyyyh- `MMMMMMMMMmNh",
+    "                 sMMMMMMMMMmmo",
+    "                 `NMMMMMMMMMd:",
+    "                  -dMMMMMMMMMo",
+    "                    -shmNMMms."
+  ]
+}

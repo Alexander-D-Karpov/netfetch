@@ -1,0 +1,25 @@
+{
+  "distro_name": "Obarun",
+  "colors": "6 6 7 1",
+  "ascii_art": [
+    "${c1}                    ,;::::;",
+    "                ;cooolc;,",
+    "             ,coool;",
+    "           ,loool,",
+    "          loooo;",
+    "        :ooool",
+    "       cooooc            ,:ccc;",
+    "      looooc           :oooooool",
+    "     cooooo          ;oooooooooo,",
+    "    :ooooo;         :ooooooooooo",
+    "    oooooo          oooooooooooc",
+    "   :oooooo         :ooooooooool",
+    "   loooooo         ;oooooooool",
+    "   looooooc        .coooooooc",
+    "   cooooooo:           ,;co;",
+    "   ,ooooooool;       ,:loc",
+    "    cooooooooooooloooooc",
+    "     ;ooooooooooooool;",
+    "       ;looooooolc;"
+  ]
+}

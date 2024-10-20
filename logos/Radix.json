@@ -1,0 +1,24 @@
+{
+  "distro_name": "Radix",
+  "colors": "1 2",
+  "ascii_art": [
+    "${c2}                .:oyhdmNo",
+    "             `/yhyoosdms`",
+    "            -o+/ohmmho-",
+    "           ..`.:/:-`",
+    "     `.--:::-.``${c1}",
+    "  .+ydNMMMMMMNmhs:`",
+    "`omMMMMMMMMMMMMMMNh-",
+    "oNMMMNmddhhyyhhhddmy.",
+    "mMMMMNmmddhhysoo+/:-`",
+    "yMMMMMMMMMMMMMMMMNNh.",
+    "-dmmmmmNNMMMMMMMMMMs`",
+    " -+oossyhmMMMMMMMMd-",
+    " `sNMMMMMMMMMMMMMm:",
+    "  `yMMMMMMNmdhhhh:",
+    "   `sNMMMMMNmmho.",
+    "    `+mMMMMMMMy.",
+    "      .yNMMMm+`",
+    "       `:yd+."
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "distro_name": "rhel_old",
+  "colors": "1 7 3",
+  "ascii_art": [
+    "${c1}             `.-..........`",
+    "            `////////::.`-/.",
+    "            -: ....-////////.",
+    "            //:-::///////////`",
+    "     `--::: `-://////////////:",
+    "     //////-    ``.-:///////// .`",
+    "     `://////:-.`    :///////::///:`",
+    "       .-/////////:---/////////////:",
+    "          .-://////////////////////.",
+    "${c2}         yMN+`.-${c1}::///////////////-`",
+    "${c2}      .-`:NMMNMs`  `..-------..`",
+    "       MN+/mMMMMMhoooyysshsss",
+    "MMM    MMMMMMMMMMMMMMyyddMMM+",
+    " MMMM   MMMMMMMMMMMMMNdyNMMh`     hyhMMM",
+    "  MMMMMMMMMMMMMMMMyoNNNMMM+.   MMMMMMMM",
+    "   MMNMMMNNMMMMMNM+ mhsMNyyyyMNMMMMsMM"
+  ]
+}
