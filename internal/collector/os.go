@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -16,12 +18,14 @@ func (c *Collector) collectOS() interface{} {
 	defer c.mutex.Unlock()
 
 	hostname, _ := os.Hostname()
+	user := os.Getenv("USER")
 	c.info.OS = &model.OSInfo{
 		Name:   runtime.GOOS,
 		Distro: detectDistro(),
 		Arch:   runtime.GOARCH,
 	}
 	c.info.Host = hostname
+	c.info.User = user
 	c.info.Kernel = getKernelVersion()
 	c.info.Uptime = getUptime()
 	c.info.Packages = getPackages()
@@ -39,15 +43,28 @@ func getKernelVersion() string {
 }
 
 func getUptime() string {
-	uptime, _ := time.ParseDuration("11h31m") // Replace with actual uptime detection
-	return formatUptime(uptime)
+	out, err := exec.Command("cat", "/proc/uptime").Output()
+	if err != nil {
+		return "Unknown"
+	}
+	fields := strings.Fields(string(out))
+	uptimeSeconds, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return "Unknown"
+	}
+	uptimeDuration := time.Duration(uptimeSeconds) * time.Second
+	return formatUptime(uptimeDuration)
 }
 
 func formatUptime(uptime time.Duration) string {
-	hours := int(uptime.Hours())
+	days := int(uptime.Hours()) / 24
+	hours := int(uptime.Hours()) % 24
 	minutes := int(uptime.Minutes()) % 60
 
 	var parts []string
+	if days > 0 {
+		parts = append(parts, fmt.Sprintf("%d days", days))
+	}
 	if hours > 0 {
 		parts = append(parts, fmt.Sprintf("%d hours", hours))
 	}
@@ -96,48 +113,50 @@ func getPackages() string {
 	return "Unknown"
 }
 
+var (
+	distro     string
+	distroOnce sync.Once
+)
+
 func detectDistro() string {
-	if runtime.GOOS != "linux" {
-		return runtime.GOOS
-	}
+	distroOnce.Do(func() {
+		distro = parseOSRelease("/etc/os-release")
+		if distro == "" {
+			distro = parseOSRelease("/usr/lib/os-release")
+		}
+		if distro == "" {
+			distro = runtime.GOOS
+		}
+	})
+	return distro
+}
 
-	if _, err := os.Stat("/etc/arch-release"); err == nil {
-		return "arch"
+func parseOSRelease(filePath string) string {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return ""
 	}
-
-	// Check /etc/os-release file
-	if file, err := os.Open("/etc/os-release"); err == nil {
-		defer func(file *os.File) {
-			err := file.Close()
-			if err != nil {
-				panic(err)
-			}
-		}(file)
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if strings.HasPrefix(line, "ID=") {
-				return strings.Trim(strings.TrimPrefix(line, "ID="), "\"")
-			}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Println("Error closing file:", err)
+		}
+	}(file)
+	scanner := bufio.NewScanner(file)
+	var name, version string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "PRETTY_NAME=") {
+			name = strings.Trim(strings.TrimPrefix(line, "PRETTY_NAME="), "\"")
+			break
+		} else if strings.HasPrefix(line, "NAME=") {
+			name = strings.Trim(strings.TrimPrefix(line, "NAME="), "\"")
+		} else if strings.HasPrefix(line, "VERSION=") {
+			version = strings.Trim(strings.TrimPrefix(line, "VERSION="), "\"")
 		}
 	}
-
-	// Check /etc/lsb-release file
-	if file, err := os.Open("/etc/lsb-release"); err == nil {
-		defer func(file *os.File) {
-			err := file.Close()
-			if err != nil {
-				panic(err)
-			}
-		}(file)
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if strings.HasPrefix(line, "DISTRIB_ID=") {
-				return strings.ToLower(strings.TrimPrefix(line, "DISTRIB_ID="))
-			}
-		}
+	if name != "" && version != "" {
+		return name + " " + version
 	}
-
-	return "unknown"
+	return name
 }

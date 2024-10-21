@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"log"
 	"net/http"
 	"strings"
 
@@ -14,20 +13,13 @@ type Handler struct {
 	collector *collector.Collector
 	logos     map[string]*logo.Logo
 	config    *config.Config
-	distro    string
 }
 
 func New(c *collector.Collector, l map[string]*logo.Logo, cfg *config.Config) *Handler {
-	info := c.GetInfo()
-	distro := strings.ToLower(info.OS.Distro)
-
-	log.Printf("Detected distro: %s", distro)
-
 	return &Handler{
 		collector: c,
 		logos:     l,
 		config:    cfg,
-		distro:    distro,
 	}
 }
 
@@ -37,4 +29,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		h.handleWeb(w)
 	}
+}
+
+func (h *Handler) getLogo(distro string) *logo.Logo {
+	distro = strings.ToLower(distro)
+	if logoData, ok := h.logos[distro]; ok {
+		return logoData
+	}
+	// Try to match by substring
+	for key, logoData := range h.logos {
+		if strings.Contains(distro, strings.ToLower(key)) {
+			return logoData
+		}
+	}
+	// Use default logo
+	return h.logos[h.config.DefaultLogo]
 }

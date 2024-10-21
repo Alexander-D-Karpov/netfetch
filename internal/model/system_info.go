@@ -3,6 +3,7 @@ package model
 type SystemInfo struct {
 	OS         *OSInfo      `json:"os"`
 	Host       string       `json:"host"`
+	User       string       `json:"user"`
 	Kernel     string       `json:"kernel"`
 	Uptime     string       `json:"uptime"`
 	Packages   string       `json:"packages"`

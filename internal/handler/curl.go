@@ -3,53 +3,129 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
 func (h *Handler) handleCurl(w http.ResponseWriter) {
 	info := h.collector.GetInfo()
-	logoData := h.logos[strings.ToLower(info.OS.Distro)]
+	logoData := h.getLogo(info.OS.Distro)
 	if logoData == nil {
 		logoData = h.logos[h.config.DefaultLogo]
 	}
 
-	colorCodes := map[string]string{
-		"${c1}": "\033[38;5;6m",
-		"${c2}": "\033[38;5;7m",
-		"${c}":  "\033[0m",
+	// Parse colors
+	colors := strings.Fields(logoData.Colors)
+	colorCodes := make(map[string]string)
+	for i, color := range colors {
+		placeholder := fmt.Sprintf("${c%d}", i+1)
+		colorCode := mapColorToANSI(color)
+		colorCodes[placeholder] = colorCode
 	}
+	colorCodes["${c}"] = "\033[0m"
 
 	var response strings.Builder
 
-	for _, line := range logoData.AsciiArt {
-		for k, v := range colorCodes {
-			line = strings.ReplaceAll(line, k, v)
+	asciiArtLines := logoData.AsciiArt
+
+	// Prepare the info lines
+	infoLines := []string{
+		fmt.Sprintf("%s@%s", info.User, info.Host),
+		"-------------",
+		fmt.Sprintf("OS: %s %s", info.OS.Distro, info.OS.Arch),
+		fmt.Sprintf("Kernel: %s", info.Kernel),
+		fmt.Sprintf("Uptime: %s", info.Uptime),
+		fmt.Sprintf("Packages: %s", info.Packages),
+		fmt.Sprintf("Shell: %s", info.Shell),
+		fmt.Sprintf("Resolution: %s", info.Resolution),
+		fmt.Sprintf("DE: %s", info.DE),
+		fmt.Sprintf("WM: %s", info.WM),
+		fmt.Sprintf("WM Theme: %s", info.WMTheme),
+		fmt.Sprintf("Theme: %s", info.Theme),
+		fmt.Sprintf("Icons: %s", info.Icons),
+		fmt.Sprintf("Terminal: %s", info.Terminal),
+		fmt.Sprintf("CPU: %s (%d) @ %.2fGHz", info.CPU.Model, info.CPU.Cores, info.CPU.Frequency/1000),
+		fmt.Sprintf("GPU: %s", info.GPU),
+		fmt.Sprintf("Memory: %dMiB / %dMiB", info.Memory.Used/1024/1024, info.Memory.Total/1024/1024),
+		fmt.Sprintf("Disk (/): %dG / %dG (%d%%)", info.Disk.Used/1024/1024/1024, info.Disk.Total/1024/1024/1024, int(info.Disk.UsedPercent)),
+	}
+
+	// Calculate the maximum length of the uncolored logo lines
+	maxLogoWidth := 0
+	plainLogoLines := make([]string, len(asciiArtLines))
+	for i, line := range asciiArtLines {
+		plainLine := line
+		for k := range colorCodes {
+			plainLine = strings.ReplaceAll(plainLine, k, "")
 		}
-		response.WriteString(line + "\n")
+		plainLine = stripANSICodes(plainLine)
+		lineWidth := len([]rune(plainLine))
+		if lineWidth > maxLogoWidth {
+			maxLogoWidth = lineWidth
+		}
+		plainLogoLines[i] = plainLine
 	}
 
-	response.WriteString("\033[0m") // Reset color
-	response.WriteString(fmt.Sprintf("OS: %s %s\n", info.OS.Distro, info.OS.Arch))
-	response.WriteString(fmt.Sprintf("Host: %s\n", info.Host))
-	response.WriteString(fmt.Sprintf("Kernel: %s\n", info.Kernel))
-	response.WriteString(fmt.Sprintf("Uptime: %s\n", info.Uptime))
-	response.WriteString(fmt.Sprintf("Packages: %s\n", info.Packages))
-	response.WriteString(fmt.Sprintf("Shell: %s\n", info.Shell))
-	response.WriteString(fmt.Sprintf("Resolution: %s\n", info.Resolution))
-	response.WriteString(fmt.Sprintf("DE: %s\n", info.DE))
-	response.WriteString(fmt.Sprintf("WM: %s\n", info.WM))
-	response.WriteString(fmt.Sprintf("WM Theme: %s\n", info.WMTheme))
-	response.WriteString(fmt.Sprintf("Theme: %s\n", info.Theme))
-	response.WriteString(fmt.Sprintf("Icons: %s\n", info.Icons))
-	response.WriteString(fmt.Sprintf("Terminal: %s\n", info.Terminal))
-	response.WriteString(fmt.Sprintf("CPU: %s (%d) @ %.2fGHz\n", info.CPU.Model, info.CPU.Cores, info.CPU.Frequency/1000))
-	response.WriteString(fmt.Sprintf("GPU: %s\n", info.GPU))
-	response.WriteString(fmt.Sprintf("Memory: %dMiB / %dMiB\n", info.Memory.Used/1024/1024, info.Memory.Total/1024/1024))
-	response.WriteString(fmt.Sprintf("Disk (/): %dG / %dG (%d%%)\n", info.Disk.Used/1024/1024/1024, info.Disk.Total/1024/1024/1024, int(info.Disk.UsedPercent)))
-
-	w.Header().Set("Content-Type", "text/plain")
-	_, err := fmt.Fprint(w, response.String())
-	if err != nil {
-		return
+	// Ensure we have enough info lines
+	maxLines := len(asciiArtLines)
+	if len(infoLines) > maxLines {
+		maxLines = len(infoLines)
 	}
+
+	// Build the output
+	for i := 0; i < maxLines; i++ {
+		artLine := ""
+		if i < len(asciiArtLines) {
+			artLine = asciiArtLines[i]
+			for k, v := range colorCodes {
+				artLine = strings.ReplaceAll(artLine, k, v)
+			}
+			artLine += "\033[0m" // Reset color
+		}
+
+		// Pad art line to max width
+		var plainArtLine string
+		if i < len(plainLogoLines) {
+			plainArtLine = plainLogoLines[i]
+		}
+		padding := maxLogoWidth - len([]rune(plainArtLine))
+		if padding < 0 {
+			padding = 0
+		}
+		artLinePadded := artLine + strings.Repeat(" ", padding)
+
+		infoLine := ""
+		if i < len(infoLines) {
+			infoLine = infoLines[i]
+		}
+
+		response.WriteString(fmt.Sprintf("%s  %s\n", artLinePadded, infoLine))
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprint(w, response.String())
+}
+
+func mapColorToANSI(color string) string {
+	colorMap := map[string]string{
+		"fg": "\033[39m", // Default foreground
+		"bg": "\033[49m", // Default background
+	}
+	if ansiCode, ok := colorMap[color]; ok {
+		return ansiCode
+	}
+
+	ansiColorNum, err := strconv.Atoi(color)
+	if err == nil && ansiColorNum >= 0 && ansiColorNum <= 255 {
+		return fmt.Sprintf("\033[38;5;%sm", color)
+	}
+
+	// Default to reset if parsing fails
+	return "\033[0m"
+}
+
+func stripANSICodes(str string) string {
+	ansiEscape := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+	return ansiEscape.ReplaceAllString(str, "")
 }
