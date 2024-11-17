@@ -5,9 +5,25 @@ listen_address: ":3000"
 active_modules:
   - os
   - cpu
+  - gpu
+  - de
+  - wm
+  - theme
+  - icons
+  - terminal
+  - font
+  - cursor
+  - uptime
   - memory
   - disk
   - network
+  - resolution
+  - packages
+  - swap
+  - localip
+  - battery
+  - poweradapter
+  - locale
 
 # Logo configuration
 default_logo: "tux"

@@ -18,6 +18,11 @@ func (c *Collector) collectMemory() interface{} {
 		Used:  memInfo["MemTotal"] - memInfo["MemAvailable"],
 		Free:  memInfo["MemAvailable"],
 	}
+	c.info.Swap = &model.SwapInfo{
+		Total: memInfo["SwapTotal"],
+		Used:  memInfo["SwapTotal"] - memInfo["SwapFree"],
+		Free:  memInfo["SwapFree"],
+	}
 
 	return c.info.Memory
 }
@@ -27,7 +32,12 @@ func parseMemInfo(filePath string) map[string]uint64 {
 	if err != nil {
 		return nil
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			return
+		}
+	}(file)
 
 	memInfo := make(map[string]uint64)
 	scanner := bufio.NewScanner(file)

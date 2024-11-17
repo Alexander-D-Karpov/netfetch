@@ -31,3 +31,25 @@ func (c *Collector) collectNetwork() interface{} {
 
 	return c.info.Network
 }
+
+func (c *Collector) collectLocalIP() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	var ips []string
+	interfaces, _ := net.Interfaces()
+	for _, iface := range interfaces {
+		if (iface.Flags&net.FlagUp) == 0 || (iface.Flags&net.FlagLoopback) != 0 {
+			continue // interface down or loopback interface
+		}
+		addrs, _ := iface.Addrs()
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+				if ipnet.IP.To4() != nil {
+					ips = append(ips, ipnet.IP.String())
+				}
+			}
+		}
+	}
+	c.info.LocalIP = ips
+}

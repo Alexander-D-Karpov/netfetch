@@ -17,7 +17,7 @@
             display: flex;
         }
         .logo {
-            white-space: pre;
+            white-space: pre-wrap; /* Ensure line breaks are preserved */
             margin-right: 20px;
             line-height: 1.2;
         }
@@ -35,7 +35,7 @@
             min-width: 100px;
         }
         .info-value {
-            color: {{index .Colors 1}};
+            color: #fff;
         }
     </style>
 </head>
@@ -59,10 +59,17 @@
         <div class="info-line"><span class="info-key">Theme:</span><span class="info-value">{{.Info.Theme}}</span></div>
         <div class="info-line"><span class="info-key">Icons:</span><span class="info-value">{{.Info.Icons}}</span></div>
         <div class="info-line"><span class="info-key">Terminal:</span><span class="info-value">{{.Info.Terminal}}</span></div>
-        <div class="info-line"><span class="info-key">CPU:</span><span class="info-value">{{.Info.CPU.Model}} ({{.Info.CPU.Cores}} cores)</span></div>
+        <div class="info-line"><span class="info-key">CPU:</span><span class="info-value">{{ .Info.CPU.Name }} ({{.Info.CPU.CoresLogical}} cores @ {{formatFreq .Info.CPU.FrequencyBase}})</span></div>
         <div class="info-line"><span class="info-key">GPU:</span><span class="info-value">{{.Info.GPU}}</span></div>
         <div class="info-line"><span class="info-key">Memory:</span><span class="info-value">{{.Info.Memory.Used | formatMiB}} / {{.Info.Memory.Total | formatMiB}}</span></div>
+        <div class="info-line"><span class="info-key">Swap:</span><span class="info-value">{{.Info.Swap.Used | formatMiB}} / {{.Info.Swap.Total | formatMiB}}</span></div>
         <div class="info-line"><span class="info-key">Disk (/):</span><span class="info-value">{{.Info.Disk.Used | formatGB}} / {{.Info.Disk.Total | formatGB}} ({{.Info.Disk.UsedPercent | printf "%.0f"}}%)</span></div>
+        <div class="info-line"><span class="info-key">Font:</span><span class="info-value">{{.Info.Font}}</span></div>
+        <div class="info-line"><span class="info-key">Cursor:</span><span class="info-value">{{.Info.Cursor}}</span></div>
+        <div class="info-line"><span class="info-key">Local IP:</span><span class="info-value">{{join .Info.LocalIP ", "}}</span></div>
+        <div class="info-line"><span class="info-key">Battery:</span><span class="info-value">{{if .Info.Battery}}{{printf "%.0f%% (%s)" .Info.Battery.Percentage .Info.Battery.Status}}{{else}}Unknown{{end}}</span></div>
+        <div class="info-line"><span class="info-key">Power Adapter:</span><span class="info-value">{{if .Info.PowerAdapter}}{{if .Info.PowerAdapter.IsConnected}}Connected{{else}}Disconnected{{end}}{{else}}Unknown{{end}}</span></div>
+        <div class="info-line"><span class="info-key">Locale:</span><span class="info-value">{{.Info.Locale}}</span></div>
     </div>
 </div>
 </body>

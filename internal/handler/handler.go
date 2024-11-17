@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
@@ -24,6 +25,7 @@ func New(c *collector.Collector, l map[string]*logo.Logo, cfg *config.Config) *H
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.collector.CollectDynamicInfo()
 	if strings.Contains(r.Header.Get("User-Agent"), "curl") {
 		h.handleCurl(w)
 	} else {
@@ -32,16 +34,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getLogo(distro string) *logo.Logo {
-	distro = strings.ToLower(distro)
-	if logoData, ok := h.logos[distro]; ok {
-		return logoData
+	// Convert distro name to lowercase for case-insensitive matching
+	distroLower := strings.ToLower(distro)
+
+	// Try to find the logo for the specific distro
+	if logo, ok := h.logos[distroLower]; ok {
+		return logo
 	}
-	// Try to match by substring
-	for key, logoData := range h.logos {
-		if strings.Contains(distro, strings.ToLower(key)) {
-			return logoData
-		}
+
+	// If not found, try default logo
+	if logo, ok := h.logos[h.config.DefaultLogo]; ok {
+		return logo
 	}
-	// Use default logo
-	return h.logos[h.config.DefaultLogo]
+
+	// If default logo is not found, log a warning and return nil
+	log.Printf("Warning: Default logo '%s' not found. Proceeding without a logo.", h.config.DefaultLogo)
+	return nil
 }

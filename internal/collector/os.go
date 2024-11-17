@@ -9,29 +9,53 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
-func (c *Collector) collectOS() interface{} {
+func (c *Collector) collectOS() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	hostname, _ := os.Hostname()
 	user := os.Getenv("USER")
+	osInfo := parseOSRelease("/etc/os-release")
+
 	c.info.OS = &model.OSInfo{
-		Name:   runtime.GOOS,
-		Distro: detectDistro(),
-		Arch:   runtime.GOARCH,
+		Name:       osInfo["NAME"],
+		PrettyName: osInfo["PRETTY_NAME"],
+		Distro:     osInfo["ID"],
+		IDLike:     osInfo["ID_LIKE"],
+		Version:    osInfo["VERSION"],
+		VersionID:  osInfo["VERSION_ID"],
+		Codename:   osInfo["VERSION_CODENAME"],
+		BuildID:    osInfo["BUILD_ID"],
+		Variant:    osInfo["VARIANT"],
+		VariantID:  osInfo["VARIANT_ID"],
+		Arch:       getArchitecture(),
 	}
 	c.info.Host = hostname
 	c.info.User = user
+	c.info.Shell = getUserShell()
 	c.info.Kernel = getKernelVersion()
-	c.info.Uptime = getUptime()
-	c.info.Packages = getPackages()
-	c.info.Shell = os.Getenv("SHELL")
+}
 
-	return c.info.OS
+func parseOSRelease(filePath string) map[string]string {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil
+	}
+
+	osInfo := make(map[string]string)
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if idx := strings.Index(line, "="); idx != -1 {
+			key := line[:idx]
+			value := strings.Trim(line[idx+1:], `"`)
+			osInfo[key] = value
+		}
+	}
+	return osInfo
 }
 
 func getKernelVersion() string {
@@ -42,8 +66,14 @@ func getKernelVersion() string {
 	return strings.TrimSpace(string(out))
 }
 
+func (c *Collector) collectUptime() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.info.Uptime = getUptime()
+}
+
 func getUptime() string {
-	out, err := exec.Command("cat", "/proc/uptime").Output()
+	out, err := os.ReadFile("/proc/uptime")
 	if err != nil {
 		return "Unknown"
 	}
@@ -75,88 +105,18 @@ func formatUptime(uptime time.Duration) string {
 	return strings.Join(parts, ", ")
 }
 
-func getPackages() string {
-	managers := []struct {
-		cmd  string
-		args []string
-	}{
-		{"pacman", []string{"-Qq"}},
-		{"dpkg", []string{"--get-selections"}},
-		{"rpm", []string{"-qa"}},
-		{"xbps-query", []string{"-l"}},
-		{"apk", []string{"info"}},
-		{"opkg", []string{"list-installed"}},
-		{"brew", []string{"list"}},
-		{"flatpak", []string{"list"}},
-		{"snap", []string{"list"}},
+func getArchitecture() string {
+	arch := runtime.GOARCH
+	if arch == "amd64" {
+		return "x86_64"
 	}
-
-	var count int
-	var usedManagers []string
-
-	for _, manager := range managers {
-		if path, err := exec.LookPath(manager.cmd); err == nil {
-			cmd := exec.Command(path, manager.args...)
-			output, err := cmd.Output()
-			if err == nil {
-				lines := strings.Count(string(output), "\n")
-				count += lines
-				usedManagers = append(usedManagers, fmt.Sprintf("%d (%s)", lines, manager.cmd))
-			}
-		}
-	}
-
-	if count > 0 {
-		return fmt.Sprintf("%d (%s)", count, strings.Join(usedManagers, ", "))
-	}
-
-	return "Unknown"
+	return arch
 }
 
-var (
-	distro     string
-	distroOnce sync.Once
-)
-
-func detectDistro() string {
-	distroOnce.Do(func() {
-		distro = parseOSRelease("/etc/os-release")
-		if distro == "" {
-			distro = parseOSRelease("/usr/lib/os-release")
-		}
-		if distro == "" {
-			distro = runtime.GOOS
-		}
-	})
-	return distro
-}
-
-func parseOSRelease(filePath string) string {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return ""
+func getUserShell() string {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "Unknown"
 	}
-	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-			fmt.Println("Error closing file:", err)
-		}
-	}(file)
-	scanner := bufio.NewScanner(file)
-	var name, version string
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "PRETTY_NAME=") {
-			name = strings.Trim(strings.TrimPrefix(line, "PRETTY_NAME="), "\"")
-			break
-		} else if strings.HasPrefix(line, "NAME=") {
-			name = strings.Trim(strings.TrimPrefix(line, "NAME="), "\"")
-		} else if strings.HasPrefix(line, "VERSION=") {
-			version = strings.Trim(strings.TrimPrefix(line, "VERSION="), "\"")
-		}
-	}
-	if name != "" && version != "" {
-		return name + " " + version
-	}
-	return name
+	return shell
 }

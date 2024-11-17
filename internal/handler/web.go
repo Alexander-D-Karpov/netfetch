@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"netfetch/internal/logo"
 	"netfetch/internal/model"
 	"path/filepath"
 	"strconv"
@@ -25,26 +26,34 @@ func parseColors(colors string) []string {
 }
 
 func mapColorToHex(color string) string {
-	colorMap := map[string]string{
-		"fg": "#FFFFFF", // Default foreground color
-		"bg": "#000000", // Default background color
+	if color == "fg" {
+		return "#FFFFFF" // Default foreground color
 	}
-	if hex, ok := colorMap[color]; ok {
-		return hex
+	if color == "bg" {
+		return "#000000" // Default background color
 	}
-
 	ansiColorNum, err := strconv.Atoi(color)
 	if err == nil && ansiColorNum >= 0 && ansiColorNum < len(ansiColors) {
 		return ansiColors[ansiColorNum]
 	}
-
 	// Default to white if parsing fails
 	return "#FFFFFF"
 }
 
 func (h *Handler) handleWeb(w http.ResponseWriter) {
 	info := h.collector.GetInfo()
-	logoData := h.getLogo(info.OS.Distro)
+	if info == nil {
+		http.Error(w, "Failed to get system info", http.StatusInternalServerError)
+		return
+	}
+
+	var logoData *logo.Logo
+	if info.OS != nil && info.OS.Distro != "" {
+		logoData = h.getLogo(info.OS.Distro)
+	}
+	if logoData == nil {
+		logoData = h.getLogo(h.config.DefaultLogo)
+	}
 	if logoData == nil {
 		http.Error(w, "Logo not found", http.StatusInternalServerError)
 		return
@@ -54,16 +63,16 @@ func (h *Handler) handleWeb(w http.ResponseWriter) {
 
 	processedAsciiArt := make([]template.HTML, len(logoData.AsciiArt))
 	for i, line := range logoData.AsciiArt {
+		// Replace color placeholders with HTML spans
 		for j := range colors {
 			placeholder := fmt.Sprintf("${c%d}", j+1)
 			line = strings.ReplaceAll(line, placeholder, fmt.Sprintf("<span style=\"color: %s\">", colors[j]))
 		}
 		line = strings.ReplaceAll(line, "${c}", "</span>")
-		// Close any unclosed <span> tags
+		// Close any unclosed spans
 		if strings.Count(line, "<span") > strings.Count(line, "</span>") {
 			line += "</span>"
 		}
-		// Mark the line as safe HTML to prevent escaping
 		processedAsciiArt[i] = template.HTML(line)
 	}
 
@@ -74,9 +83,12 @@ func (h *Handler) handleWeb(w http.ResponseWriter) {
 		"formatGB": func(b uint64) string {
 			return fmt.Sprintf("%.0fG", float64(b)/1024/1024/1024)
 		},
+		"join": strings.Join,
+		"formatFreq": func(freq uint32) string {
+			return fmt.Sprintf("%.2f GHz", float64(freq)/1000)
+		},
 	}
 
-	// Load the template from file
 	tmplPath := filepath.Join("templates", "neofetch.html")
 	t, err := template.New("neofetch.html").Funcs(funcMap).ParseFiles(tmplPath)
 	if err != nil {

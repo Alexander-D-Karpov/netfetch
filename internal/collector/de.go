@@ -1,26 +1,25 @@
 package collector
 
-import (
-	"os"
-)
-
-func (c *Collector) collectDE() interface{} {
+func (c *Collector) collectDE() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	c.info.DE = getDE()
-	return c.info.DE
 }
 
 func getDE() string {
-	de := os.Getenv("XDG_CURRENT_DESKTOP")
-	if de == "" {
-		de = os.Getenv("DESKTOP_SESSION")
+	deProcesses := map[string][]string{
+		"GNOME":    {"gnome-session", "gnome-shell"},
+		"KDE":      {"plasmashell", "ksmserver"},
+		"XFCE":     {"xfce4-session"},
+		"Cinnamon": {"cinnamon-session"},
+		"MATE":     {"mate-session"},
+		"Unity":    {"unity-panel-service"},
+		"LXDE":     {"lxsession"},
+		"Deepin":   {"dde-desktop"},
+		"Pantheon": {"gala"},
+		"Budgie":   {"budgie-wm"},
+		"LXQt":     {"lxqt-session"},
 	}
-	if de == "" {
-		de = os.Getenv("GDMSESSION")
-	}
-	if de == "" {
-		de = "Unknown"
-	}
-	return de
+
+	return detectProcess(deProcesses)
 }
