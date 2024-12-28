@@ -1,8 +1,13 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"netfetch/internal/collector"
 	"netfetch/internal/config"
@@ -11,10 +16,23 @@ import (
 )
 
 func main() {
+	// Parse command line flags
+	webPort := flag.Int("web-port", 22828, "Web server port")
+	configFile := flag.String("config", "config.yaml", "Path to config file")
+	flag.Parse()
+
+	// Configure logging
+	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
+
 	// Load configuration
-	cfg, err := config.Load("config.yaml")
+	cfg, err := config.Load(*configFile)
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Override config with command line flags
+	if *webPort != 22828 {
+		cfg.ListenAddress = fmt.Sprintf(":%d", *webPort)
 	}
 
 	// Load logos
@@ -24,15 +42,31 @@ func main() {
 	}
 	log.Printf("Loaded %d logos", len(logos))
 
-	// Initialize collector
+	// Initialize collector and handler
 	c := collector.New(cfg.ActiveModules)
-
-	// Initialize handler
 	h := handler.New(c, logos, cfg)
 
-	// Set up HTTP server
-	http.HandleFunc("/", h.ServeHTTP)
+	// Set up signal handling
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Printf("Starting server on %s", cfg.ListenAddress)
-	log.Fatal(http.ListenAndServe(cfg.ListenAddress, nil))
+	// Start HTTP server
+	server := &http.Server{
+		Addr:    cfg.ListenAddress,
+		Handler: h,
+	}
+
+	go func() {
+		log.Printf("Starting server on %s", cfg.ListenAddress)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-sigChan
+	log.Println("Shutting down server...")
+	if err := server.Close(); err != nil {
+		log.Printf("Error during shutdown: %v", err)
+	}
 }
