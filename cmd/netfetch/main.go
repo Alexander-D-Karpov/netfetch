@@ -6,159 +6,285 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"netfetch/internal/collector"
 	"netfetch/internal/config"
-	"netfetch/internal/daemon"
 	"netfetch/internal/display"
+	"netfetch/internal/handler"
 	"netfetch/internal/logo"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
+)
+
+const (
+	defaultPort      = 22828
+	defaultConfigDir = "."
+	defaultLogoDir   = "logos"
+)
+
+type Mode int
+
+const (
+	ModeServe Mode = iota
+	ModeShow
+	ModeConnect
+	ModeHelp
 )
 
 func main() {
-	// Parse command line arguments
-	args := os.Args[1:]
-	if len(args) == 0 {
-		// Default behavior: display in console
-		showLocalInfo()
+	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help") {
+		printHelp()
 		return
 	}
 
-	// Handle remote host connection (no flag needed)
-	if !strings.HasPrefix(args[0], "-") {
-		if err := connectToRemote(args[0]); err != nil {
-			log.Fatalf("Error: %v", err)
-		}
-		return
+	var (
+		port       int
+		configFile string
+		logoDir    string
+		timeout    int
+	)
+
+	flagSet := flag.NewFlagSet("netfetch", flag.ExitOnError)
+	flagSet.IntVar(&port, "port", 0, "Port for server/client")
+	flagSet.StringVar(&configFile, "config", "", "Path to config file")
+	flagSet.StringVar(&logoDir, "logo-dir", "", "Directory containing logo files")
+	flagSet.IntVar(&timeout, "timeout", 5, "Connection timeout in seconds")
+
+	mode, host, args := parseArgs(os.Args[1:])
+
+	flagSet.Parse(args)
+
+	switch mode {
+	case ModeServe:
+		runServe(port, configFile, logoDir)
+	case ModeShow:
+		runShow(configFile, logoDir)
+	case ModeConnect:
+		runConnect(host, port, timeout)
+	case ModeHelp:
+		printHelp()
 	}
-
-	// Parse daemon commands
-	if args[0] == "-d" {
-		if len(args) < 2 {
-			log.Fatal("Missing daemon command. Usage: netfetch -d [start|stop|status]")
-		}
-
-		cmd := flag.NewFlagSet("daemon", flag.ExitOnError)
-		port := cmd.Int("port", 22828, "Port for daemon communication")
-		webPort := cmd.Int("web-port", 22828, "Web server port")
-		configFile := cmd.String("config", "config.yaml", "Path to config file")
-
-		// Parse remaining arguments after the daemon command
-		if err := cmd.Parse(args[2:]); err != nil {
-			log.Fatal(err)
-		}
-
-		// Get executable path for daemon
-		exePath, err := os.Executable()
-		if err != nil {
-			log.Fatal(err)
-		}
-		absExePath, err := filepath.Abs(exePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// Initialize and run daemon command
-		d := daemon.New(absExePath, *configFile, *port, *webPort)
-
-		switch args[1] {
-		case "start":
-			if err := d.Start(); err != nil {
-				log.Fatalf("Error starting daemon: %v", err)
-			}
-		case "stop":
-			if err := d.Stop(); err != nil {
-				log.Fatalf("Error stopping daemon: %v", err)
-			}
-		case "status":
-			if err := d.Status(); err != nil {
-				log.Fatalf("Error checking daemon status: %v", err)
-			}
-		case "install":
-			if err := d.InstallSystemd(); err != nil {
-				log.Fatalf("Error installing systemd service: %v", err)
-			}
-		case "uninstall":
-			if err := d.UninstallSystemd(); err != nil {
-				log.Fatalf("Error uninstalling systemd service: %v", err)
-			}
-		default:
-			log.Fatalf("Unknown daemon command: %s", args[1])
-		}
-		return
-	}
-
-	// If we got here, show help
-	showHelp()
 }
 
-func showLocalInfo() {
-	// Load configuration
-	cfg, err := config.Load("config.yaml")
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+func parseArgs(args []string) (Mode, string, []string) {
+	if len(args) == 0 {
+		return ModeServe, "", args
 	}
 
-	// Load logos
+	firstArg := args[0]
+
+	if firstArg == "serve" {
+		return ModeServe, "", args[1:]
+	}
+
+	if firstArg == "show" {
+		return ModeShow, "", args[1:]
+	}
+
+	if firstArg == "connect" {
+		if len(args) > 1 {
+			return ModeConnect, args[1], args[2:]
+		}
+		log.Fatal("connect mode requires a host argument")
+	}
+
+	if !isFlag(firstArg) {
+		return ModeConnect, firstArg, args[1:]
+	}
+
+	return ModeServe, "", args
+}
+
+func isFlag(arg string) bool {
+	return len(arg) > 0 && arg[0] == '-'
+}
+
+func runShow(configFile, logoDir string) {
+	cfg := loadConfig(configFile, logoDir, 0)
+
 	logos, err := logo.LoadAll(cfg.LogoDir)
 	if err != nil {
 		log.Fatalf("Failed to load logos: %v", err)
 	}
 
-	// Initialize collector
 	c := collector.New(cfg.ActiveModules)
+	c.CollectDynamicInfo()
 
-	// Display info
 	if err := display.ShowColorized(c, logos, cfg); err != nil {
 		log.Fatalf("Error displaying info: %v", err)
 	}
 }
 
-func connectToRemote(host string) error {
-	// Add default port if not specified
-	if !strings.Contains(host, ":") {
-		host = fmt.Sprintf("%s:22828", host)
-	}
+func runServe(port int, configFile, logoDir string) {
+	cfg := loadConfig(configFile, logoDir, port)
 
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	// Make request
-	resp, err := client.Get(fmt.Sprintf("http://%s", host))
+	logos, err := logo.LoadAll(cfg.LogoDir)
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %v", host, err)
+		log.Fatalf("Failed to load logos: %v", err)
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			log.Fatalf("Error closing response body: %v", err)
-		}
-	}(resp.Body)
+	log.Printf("Loaded %d logos", len(logos))
 
-	// Copy response to stdout
-	_, err = io.Copy(os.Stdout, resp.Body)
-	return err
+	c := collector.New(cfg.ActiveModules)
+	h := handler.New(c, logos, cfg)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	server := &http.Server{
+		Addr:    cfg.ListenAddress,
+		Handler: h,
+	}
+
+	go func() {
+		log.Printf("Starting server on %s", cfg.ListenAddress)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	<-sigChan
+	log.Println("Shutting down server...")
+	if err := server.Close(); err != nil {
+		log.Printf("Error during shutdown: %v", err)
+	}
 }
 
-func showHelp() {
-	fmt.Printf(`Usage: netfetch [OPTIONS] [HOST]
+func runConnect(host string, port, timeout int) {
+	if host == "" {
+		log.Fatal("No host specified for connect mode")
+	}
 
-Display system information in a fancy way.
+	if port == 0 {
+		port = defaultPort
+	}
 
-Options:
-  -d start [--port PORT] [--web-port PORT] [--config FILE]  Start daemon
-  -d stop                                                   Stop daemon
-  -d status                                                Show daemon status
-  -d install                                               Install systemd service
-  -d uninstall                                             Uninstall systemd service
+	fullHost := host
+	if !containsPort(host) {
+		fullHost = fmt.Sprintf("%s:%d", host, port)
+	}
 
-Examples:
-  netfetch                            Show local system info
-  netfetch example.com                Connect to remote host
-  netfetch -d start --web-port 8080   Start daemon with custom web port
-`)
+	client := &http.Client{
+		Timeout: time.Duration(timeout) * time.Second,
+	}
+
+	resp, err := client.Get(fmt.Sprintf("http://%s", fullHost))
+	if err != nil {
+		log.Fatalf("Failed to connect to %s: %v", fullHost, err)
+	}
+	defer resp.Body.Close()
+
+	_, err = io.Copy(os.Stdout, resp.Body)
+	if err != nil {
+		log.Fatalf("Error reading response: %v", err)
+	}
+}
+
+func loadConfig(configFile, logoDir string, port int) *config.Config {
+	if configFile == "" {
+		configFile = "config.yaml"
+	}
+
+	cfg, err := config.Load(configFile)
+	if err != nil {
+		log.Printf("Warning: Could not load config file '%s', using defaults: %v", configFile, err)
+		cfg = &config.Config{
+			ListenAddress: fmt.Sprintf(":%d", defaultPort),
+			ActiveModules: []string{
+				"os", "kernel", "uptime", "packages", "shell", "resolution",
+				"de", "wm", "theme", "icons", "terminal", "cpu", "gpu",
+				"memory", "disk", "swap", "battery", "locale",
+			},
+			DefaultLogo: "arch",
+			LogoDir:     defaultLogoDir,
+		}
+	}
+
+	if logoDir != "" {
+		cfg.LogoDir = logoDir
+	} else if cfg.LogoDir == "" {
+		cfg.LogoDir = defaultLogoDir
+	}
+
+	if port > 0 {
+		cfg.ListenAddress = fmt.Sprintf(":%d", port)
+	} else if cfg.ListenAddress == "" {
+		cfg.ListenAddress = fmt.Sprintf(":%d", defaultPort)
+	}
+
+	return cfg
+}
+
+func containsPort(host string) bool {
+	for i := len(host) - 1; i >= 0; i-- {
+		if host[i] == ':' {
+			return true
+		}
+		if host[i] == ']' {
+			return false
+		}
+	}
+	return false
+}
+
+func printHelp() {
+	fmt.Println(`netfetch - Display system information
+
+USAGE:
+    netfetch [MODE] [OPTIONS] [HOST]
+
+MODES:
+    (default)
+        Start HTTP server (default mode when no arguments)
+
+    serve
+        Start HTTP server to serve system information
+        netfetch serve [OPTIONS]
+
+    show
+        Display local system information (dry run)
+        netfetch show [OPTIONS]
+
+    connect <host>
+        Connect to a remote netfetch server
+        netfetch connect <host> [OPTIONS]
+        netfetch <host> [OPTIONS]
+
+OPTIONS:
+    -port int
+        Port number for server/client (default: 22828)
+
+    -config string
+        Path to config file (default: config.yaml)
+
+    -logo-dir string
+        Directory containing logo files (default: logos)
+
+    -timeout int
+        Connection timeout in seconds (default: 5)
+
+    -h, -help, help
+        Show this help message
+
+EXAMPLES:
+    Start server (default):
+        netfetch
+        netfetch serve
+
+    Start server on custom port:
+        netfetch -port 8080
+        netfetch serve -port 8080
+
+    Show local system info:
+        netfetch show
+
+    Connect to remote server:
+        netfetch example.com
+        netfetch connect example.com
+        netfetch example.com:8080 -timeout 10
+
+    Use custom config:
+        netfetch -config /path/to/config.yaml
+        netfetch show -config custom.yaml -logo-dir /path/to/logos`)
 }

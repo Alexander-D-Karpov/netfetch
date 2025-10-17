@@ -1,97 +1,19 @@
 package collector
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 )
 
-type PackageManager struct {
-	Name    string            // Name of the package manager
-	Command string            // Command to execute
-	Args    []string          // Arguments for package counting
-	Offset  int               // Number to subtract from count (e.g., for header lines)
-	Filter  func(string) bool // Optional function to filter package lines
-}
-
-var packageManagers = []PackageManager{
-	{
-		Name:    "pacman",
-		Command: "pacman",
-		Args:    []string{"-Qq"},
-		Offset:  1, // For trailing newline
-	},
-	{
-		Name:    "dpkg",
-		Command: "dpkg-query",
-		Args:    []string{"-f", "${binary:Package}\n", "-W"},
-		Offset:  1,
-	},
-	{
-		Name:    "rpm",
-		Command: "rpm",
-		Args:    []string{"-qa", "--queryformat", "%{NAME}\n"},
-		Offset:  1,
-	},
-	{
-		Name:    "flatpak",
-		Command: "flatpak",
-		Args:    []string{"list"},
-		Offset:  2, // Header line and trailing newline
-		Filter: func(line string) bool {
-			return len(line) > 0 && !strings.HasPrefix(line, "Application") && !strings.HasPrefix(line, "Runtime")
-		},
-	},
-	{
-		Name:    "snap",
-		Command: "snap",
-		Args:    []string{"list"},
-		Offset:  2, // Header line and trailing newline
-		Filter: func(line string) bool {
-			return len(line) > 0 && !strings.HasPrefix(line, "Name")
-		},
-	},
-	{
-		Name:    "brew",
-		Command: "brew",
-		Args:    []string{"list", "--formula"},
-		Offset:  1,
-	},
-	{
-		Name:    "brew-cask",
-		Command: "brew",
-		Args:    []string{"list", "--cask"},
-		Offset:  1,
-	},
-	{
-		Name:    "apk",
-		Command: "apk",
-		Args:    []string{"info"},
-		Offset:  1,
-	},
-	{
-		Name:    "xbps",
-		Command: "xbps-query",
-		Args:    []string{"-l"},
-		Offset:  1,
-		Filter: func(line string) bool {
-			return len(line) > 0 && strings.HasPrefix(line, "ii")
-		},
-	},
-	{
-		Name:    "opkg",
-		Command: "opkg",
-		Args:    []string{"list-installed"},
-		Offset:  1,
-	},
-}
-
-// PackageCount represents the count from a specific package manager
 type PackageCount struct {
 	Manager string
 	Count   int
-	Error   error
 }
 
 func (c *Collector) collectPackages() {
@@ -103,94 +25,304 @@ func (c *Collector) collectPackages() {
 		return
 	}
 
-	counts := make(chan PackageCount, len(packageManagers))
+	managers := getPackageManagers()
+	counts := make(chan PackageCount, len(managers))
 	var wg sync.WaitGroup
 
-	// Start a goroutine for each package manager
-	for _, pm := range packageManagers {
+	for _, manager := range managers {
 		wg.Add(1)
-		go func(pm PackageManager) {
+		go func(m string) {
 			defer wg.Done()
-			count, err := countPackages(pm)
-			counts <- PackageCount{
-				Manager: pm.Name,
-				Count:   count,
-				Error:   err,
+			count := countPackages(m)
+			if count > 0 {
+				counts <- PackageCount{Manager: m, Count: count}
 			}
-		}(pm)
+		}(manager)
 	}
 
-	// Close counts channel after all goroutines complete
 	go func() {
 		wg.Wait()
 		close(counts)
 	}()
 
-	// Collect results
-	var totalPackages int
+	totalPackages := 0
 	var details []string
-	seenManagers := make(map[string]bool)
 
 	for count := range counts {
-		if count.Error != nil || count.Count == 0 {
-			continue
-		}
-
-		// Skip duplicate manager names (e.g., brew formula and cask)
-		baseManager := strings.Split(count.Manager, "-")[0]
-		if seenManagers[baseManager] {
-			totalPackages += count.Count
-			continue
-		}
-		seenManagers[baseManager] = true
-
 		totalPackages += count.Count
 		details = append(details, fmt.Sprintf("%d (%s)", count.Count, count.Manager))
 	}
 
 	if totalPackages > 0 {
-		c.info.Packages = fmt.Sprintf("%d (%s)", totalPackages, strings.Join(details, ", "))
+		if len(details) == 1 {
+			c.info.Packages = details[0]
+		} else {
+			c.info.Packages = strings.Join(details, ", ")
+		}
 	} else {
 		c.info.Packages = "Unknown"
 	}
 }
 
-func countPackages(pm PackageManager) (int, error) {
-	// Check if the command exists
-	path, err := exec.LookPath(pm.Command)
-	if err != nil {
-		return 0, fmt.Errorf("command not found: %s", pm.Command)
+func getPackageManagers() []string {
+	managers := []string{}
+
+	switch runtime.GOOS {
+	case "linux":
+		if pathExists("/var/lib/dpkg/status") {
+			managers = append(managers, "dpkg")
+		}
+		if pathExists("/var/lib/pacman/local") {
+			managers = append(managers, "pacman")
+		}
+		if pathExists("/var/lib/rpm") {
+			managers = append(managers, "rpm")
+		}
+		if pathExists("/var/db/pkg") {
+			managers = append(managers, "emerge")
+		}
+		if pathExists("/var/lib/flatpak/app") || pathExists(filepath.Join(os.Getenv("HOME"), ".local/share/flatpak/app")) {
+			managers = append(managers, "flatpak")
+		}
+		if pathExists("/snap") {
+			managers = append(managers, "snap")
+		}
+		if pathExists("/nix/var/nix/profiles") {
+			managers = append(managers, "nix")
+		}
+
+	case "darwin":
+		if pathExists("/usr/local/Cellar") || pathExists("/opt/homebrew/Cellar") {
+			managers = append(managers, "brew")
+		}
+		if pathExists("/nix/var/nix/profiles") {
+			managers = append(managers, "nix")
+		}
+
+	case "freebsd", "openbsd", "netbsd":
+		if pathExists("/var/db/pkg") {
+			managers = append(managers, "pkg")
+		}
 	}
 
-	// Execute the command
-	cmd := exec.Command(path, pm.Args...)
-	output, err := cmd.Output()
+	return managers
+}
+
+func countPackages(manager string) int {
+	switch manager {
+	case "dpkg":
+		return countDpkg()
+	case "pacman":
+		return countPacman()
+	case "rpm":
+		return countRPM()
+	case "emerge":
+		return countEmerge()
+	case "flatpak":
+		return countFlatpak()
+	case "snap":
+		return countSnap()
+	case "nix":
+		return countNix()
+	case "brew":
+		return countBrew()
+	case "pkg":
+		return countPkgBSD()
+	default:
+		return 0
+	}
+}
+
+func countDpkg() int {
+	file, err := os.Open("/var/lib/dpkg/status")
 	if err != nil {
-		return 0, fmt.Errorf("error executing %s: %v", pm.Command, err)
+		return 0
+	}
+	defer file.Close()
+
+	count := 0
+	scanner := bufio.NewScanner(file)
+	inPackage := false
+	isInstalled := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if strings.HasPrefix(line, "Package:") {
+			inPackage = true
+			isInstalled = false
+		} else if inPackage && strings.HasPrefix(line, "Status:") {
+			if strings.Contains(line, "install ok installed") {
+				isInstalled = true
+			}
+		} else if inPackage && line == "" {
+			if isInstalled {
+				count++
+			}
+			inPackage = false
+			isInstalled = false
+		}
 	}
 
-	// Split output into lines
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	return count
+}
 
-	// Apply filter if provided
-	if pm.Filter != nil {
-		filteredLines := make([]string, 0, len(lines))
+func countPacman() int {
+	entries, err := os.ReadDir("/var/lib/pacman/local")
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() && entry.Name() != "ALPM_DB_VERSION" {
+			count++
+		}
+	}
+
+	return count
+}
+
+func countRPM() int {
+	out, err := exec.Command("rpm", "-qa").Output()
+	if err != nil {
+		return 0
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	return len(lines)
+}
+
+func countEmerge() int {
+	count := 0
+
+	err := filepath.WalkDir("/var/db/pkg", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+
+		if d.IsDir() && strings.Count(path, string(os.PathSeparator)) == 4 {
+			count++
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return 0
+	}
+
+	return count
+}
+
+func countFlatpak() int {
+	count := 0
+
+	systemPath := "/var/lib/flatpak/app"
+	if entries, err := os.ReadDir(systemPath); err == nil {
+		count += len(entries)
+	}
+
+	homeDir := os.Getenv("HOME")
+	if homeDir != "" {
+		userPath := filepath.Join(homeDir, ".local/share/flatpak/app")
+		if entries, err := os.ReadDir(userPath); err == nil {
+			count += len(entries)
+		}
+	}
+
+	return count
+}
+
+func countSnap() int {
+	entries, err := os.ReadDir("/snap")
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() && entry.Name() != "bin" && entry.Name() != "README" {
+			count++
+		}
+	}
+
+	return count
+}
+
+func countNix() int {
+	count := 0
+
+	profilePaths := []string{
+		"/nix/var/nix/profiles/system",
+		filepath.Join(os.Getenv("HOME"), ".nix-profile"),
+	}
+
+	for _, profilePath := range profilePaths {
+		manifestPath := filepath.Join(profilePath, "manifest.nix")
+		if !pathExists(manifestPath) {
+			manifestPath = filepath.Join(profilePath, "manifest.json")
+		}
+
+		if !pathExists(manifestPath) {
+			continue
+		}
+
+		content, err := os.ReadFile(manifestPath)
+		if err != nil {
+			continue
+		}
+
+		lines := strings.Split(string(content), "\n")
 		for _, line := range lines {
-			if pm.Filter(line) {
-				filteredLines = append(filteredLines, line)
+			if strings.Contains(line, "name =") || strings.Contains(line, `"name":`) {
+				count++
 			}
 		}
-		lines = filteredLines
 	}
 
-	// Calculate count
-	count := len(lines)
-	if count > 0 {
-		count -= pm.Offset
-	}
-	if count < 0 {
-		count = 0
+	return count
+}
+
+func countBrew() int {
+	cellarPaths := []string{
+		"/opt/homebrew/Cellar",
+		"/usr/local/Cellar",
 	}
 
-	return count, nil
+	for _, cellarPath := range cellarPaths {
+		if entries, err := os.ReadDir(cellarPath); err == nil {
+			return len(entries)
+		}
+	}
+
+	return 0
+}
+
+func countPkgBSD() int {
+	entries, err := os.ReadDir("/var/db/pkg")
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") {
+			count++
+		}
+	}
+
+	return count
+}
+
+func formatPackageCount(count int, manager string) string {
+	if manager == "" {
+		return fmt.Sprintf("%d", count)
+	}
+	return fmt.Sprintf("%d (%s)", count, manager)
+}
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

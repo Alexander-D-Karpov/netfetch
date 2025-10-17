@@ -20,12 +20,10 @@ func New(activeModules []string) *Collector {
 		},
 	}
 
-	// Initialize active modules map
 	for _, moduleName := range activeModules {
 		c.activeModules[moduleName] = true
 	}
 
-	// Collect static info at startup
 	c.collectStaticInfo()
 
 	return c
@@ -62,6 +60,7 @@ func (c *Collector) collectStaticInfo() {
 	if c.activeModules["cursor"] {
 		c.collectCursor()
 	}
+	c.collectShell()
 }
 
 func (c *Collector) CollectDynamicInfo() {
