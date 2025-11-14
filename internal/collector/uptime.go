@@ -146,16 +146,12 @@ func formatUptime(uptime time.Duration) string {
 		}
 	}
 
-	if minutes > 0 {
+	if minutes > 0 || len(parts) == 0 {
 		if minutes == 1 {
 			parts = append(parts, "1 min")
 		} else {
 			parts = append(parts, fmt.Sprintf("%d mins", minutes))
 		}
-	}
-
-	if len(parts) == 0 {
-		return "less than a minute"
 	}
 
 	return strings.Join(parts, ", ")

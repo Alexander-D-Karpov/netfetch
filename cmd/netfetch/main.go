@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"netfetch/assets"
 	"netfetch/internal/collector"
 	"netfetch/internal/config"
 	"netfetch/internal/display"
@@ -19,9 +20,8 @@ import (
 )
 
 const (
-	defaultPort      = 22828
-	defaultConfigDir = "."
-	defaultLogoDir   = "logos"
+	defaultPort    = 22828
+	defaultLogoDir = "logos"
 )
 
 type Mode int
@@ -32,6 +32,10 @@ const (
 	ModeConnect
 	ModeHelp
 )
+
+func init() {
+	logo.EmbeddedLogos = assets.LogosFS
+}
 
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help") {
@@ -44,6 +48,7 @@ func main() {
 		configFile string
 		logoDir    string
 		timeout    int
+		showAll    bool
 	)
 
 	flagSet := flag.NewFlagSet("netfetch", flag.ExitOnError)
@@ -51,21 +56,48 @@ func main() {
 	flagSet.StringVar(&configFile, "config", "", "Path to config file")
 	flagSet.StringVar(&logoDir, "logo-dir", "", "Directory containing logo files")
 	flagSet.IntVar(&timeout, "timeout", 5, "Connection timeout in seconds")
+	flagSet.BoolVar(&showAll, "all", false, "Show all modules")
 
 	mode, host, args := parseArgs(os.Args[1:])
 
 	flagSet.Parse(args)
 
+	var modules []string
+	if mode == ModeShow {
+		modules = flagSet.Args()
+	}
+
 	switch mode {
 	case ModeServe:
 		runServe(port, configFile, logoDir)
 	case ModeShow:
-		runShow(configFile, logoDir)
+		runShow(configFile, logoDir, showAll, modules)
 	case ModeConnect:
 		runConnect(host, port, timeout)
 	case ModeHelp:
 		printHelp()
 	}
+}
+
+func withBaseModules(mods []string) []string {
+	base := []string{"os"}
+	out := make([]string, 0, len(mods)+len(base))
+	out = append(out, mods...)
+
+	for _, b := range base {
+		found := false
+		for _, m := range mods {
+			if m == b {
+				found = true
+				break
+			}
+		}
+		if !found {
+			out = append(out, b)
+		}
+	}
+
+	return out
 }
 
 func parseArgs(args []string) (Mode, string, []string) {
@@ -101,15 +133,23 @@ func isFlag(arg string) bool {
 	return len(arg) > 0 && arg[0] == '-'
 }
 
-func runShow(configFile, logoDir string) {
+func runShow(configFile, logoDir string, showAll bool, modules []string) {
 	cfg := loadConfig(configFile, logoDir, 0)
+
+	if showAll {
+		cfg.ActiveModules = config.GetDefaultModules()
+	} else if len(modules) > 0 {
+		cfg.ActiveModules = modules
+	}
 
 	logos, err := logo.LoadAll(cfg.LogoDir)
 	if err != nil {
 		log.Fatalf("Failed to load logos: %v", err)
 	}
 
-	c := collector.New(cfg.ActiveModules)
+	collectorModules := withBaseModules(cfg.ActiveModules)
+
+	c := collector.New(collectorModules)
 	c.CollectDynamicInfo()
 
 	if err := display.ShowColorized(c, logos, cfg); err != nil {
@@ -126,7 +166,9 @@ func runServe(port int, configFile, logoDir string) {
 	}
 	log.Printf("Loaded %d logos", len(logos))
 
-	c := collector.New(cfg.ActiveModules)
+	collectorModules := withBaseModules(cfg.ActiveModules)
+
+	c := collector.New(collectorModules)
 	h := handler.New(c, logos, cfg)
 
 	sigChan := make(chan os.Signal, 1)
@@ -182,29 +224,22 @@ func runConnect(host string, port, timeout int) {
 }
 
 func loadConfig(configFile, logoDir string, port int) *config.Config {
+	var cfg *config.Config
+
 	if configFile == "" {
 		configFile = "config.yaml"
 	}
 
-	cfg, err := config.Load(configFile)
+	loadedCfg, err := config.Load(configFile)
 	if err != nil {
-		log.Printf("Warning: Could not load config file '%s', using defaults: %v", configFile, err)
-		cfg = &config.Config{
-			ListenAddress: fmt.Sprintf(":%d", defaultPort),
-			ActiveModules: []string{
-				"os", "kernel", "uptime", "packages", "shell", "resolution",
-				"de", "wm", "theme", "icons", "terminal", "cpu", "gpu",
-				"memory", "disk", "swap", "battery", "locale",
-			},
-			DefaultLogo: "arch",
-			LogoDir:     defaultLogoDir,
-		}
+		log.Printf("Config file not found, using defaults")
+		cfg = getDefaultConfig()
+	} else {
+		cfg = loadedCfg
 	}
 
 	if logoDir != "" {
 		cfg.LogoDir = logoDir
-	} else if cfg.LogoDir == "" {
-		cfg.LogoDir = defaultLogoDir
 	}
 
 	if port > 0 {
@@ -213,7 +248,24 @@ func loadConfig(configFile, logoDir string, port int) *config.Config {
 		cfg.ListenAddress = fmt.Sprintf(":%d", defaultPort)
 	}
 
+	if cfg.LogoDir == "" {
+		cfg.LogoDir = ""
+	}
+
 	return cfg
+}
+
+func getDefaultConfig() *config.Config {
+	return &config.Config{
+		ListenAddress: fmt.Sprintf(":%d", defaultPort),
+		ActiveModules: []string{
+			"os", "kernel", "uptime", "packages", "shell", "resolution",
+			"de", "wm", "theme", "icons", "terminal", "cpu", "gpu",
+			"memory", "disk", "swap", "battery", "locale",
+		},
+		DefaultLogo: "arch",
+		LogoDir:     "",
+	}
 }
 
 func containsPort(host string) bool {
@@ -244,7 +296,7 @@ MODES:
 
     show
         Display local system information (dry run)
-        netfetch show [OPTIONS]
+        netfetch show [OPTIONS] [MODULE ...]
 
     connect <host>
         Connect to a remote netfetch server
@@ -259,10 +311,13 @@ OPTIONS:
         Path to config file (default: config.yaml)
 
     -logo-dir string
-        Directory containing logo files (default: logos)
+        Directory containing logo files (uses embedded logos by default)
 
     -timeout int
         Connection timeout in seconds (default: 5)
+
+    -all
+        Show all modules (ignore active_modules from config)
 
     -h, -help, help
         Show this help message
@@ -276,8 +331,14 @@ EXAMPLES:
         netfetch -port 8080
         netfetch serve -port 8080
 
-    Show local system info:
+    Show local system info (active modules from config):
         netfetch show
+
+    Show only specific modules:
+        netfetch show cpu gpu
+
+    Show all modules:
+        netfetch show -all
 
     Connect to remote server:
         netfetch example.com

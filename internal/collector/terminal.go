@@ -60,7 +60,26 @@ func getTerminal() string {
 		return "Terminator"
 	}
 
-	return detectTerminalFromProcessTree()
+	detected := detectTerminalFromProcessTree()
+	if detected != "Unknown" {
+		return detected
+	}
+
+	tty := getTTY()
+	if tty != "" {
+		return tty
+	}
+
+	return "Unknown"
+}
+
+func getTTY() string {
+	tty, err := os.Readlink("/proc/self/fd/0")
+	if err == nil && strings.HasPrefix(tty, "/dev/") {
+		return tty
+	}
+
+	return ""
 }
 
 func detectTerminalFromProcessTree() string {

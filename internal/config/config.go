@@ -1,8 +1,9 @@
 package config
 
 import (
-	"gopkg.in/yaml.v3"
 	"os"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -24,5 +25,22 @@ func Load(filename string) (*Config, error) {
 		return nil, err
 	}
 
+	if cfg.DefaultLogo == "" {
+		cfg.DefaultLogo = "arch"
+	}
+
+	if len(cfg.ActiveModules) == 0 {
+		cfg.ActiveModules = GetDefaultModules()
+	}
+
 	return &cfg, nil
+}
+
+func GetDefaultModules() []string {
+	return []string{
+		"os", "hostinfo", "bios", "kernel", "uptime", "packages", "shell",
+		"resolution", "de", "wm", "theme", "icons", "terminal", "cpu", "gpu",
+		"memory", "disk", "swap", "battery", "locale", "processes", "cpuusage",
+		"publicip", "wifi", "datetime", "users", "brightness", "loginmanager",
+	}
 }

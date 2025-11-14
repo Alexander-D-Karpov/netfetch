@@ -54,18 +54,68 @@ func collectMemoryLinux(info *model.SystemInfo) {
 		Free:  available,
 	}
 
-	swapTotal := memInfo["SwapTotal"]
-	swapFree := memInfo["SwapFree"]
-	swapUsed := swapTotal - swapFree
-	if swapUsed < 0 {
-		swapUsed = 0
+	swaps := parseSwapDevices()
+	if len(swaps) > 0 {
+		// Calculate total from devices
+		var totalSwap, usedSwap uint64
+		for _, swap := range swaps {
+			totalSwap += swap.Total
+			usedSwap += swap.Used
+		}
+		info.Swap = &model.SwapInfo{
+			Total: totalSwap,
+			Used:  usedSwap,
+			Free:  totalSwap - usedSwap,
+		}
+	} else {
+		// Fallback to meminfo
+		swapTotal := memInfo["SwapTotal"]
+		swapFree := memInfo["SwapFree"]
+		swapUsed := swapTotal - swapFree
+
+		if swapTotal > 0 {
+			info.Swap = &model.SwapInfo{
+				Total: swapTotal,
+				Used:  swapUsed,
+				Free:  swapFree,
+			}
+		}
+	}
+}
+
+func parseSwapDevices() []model.SwapInfo {
+	data, err := os.ReadFile("/proc/swaps")
+	if err != nil {
+		return nil
 	}
 
-	info.Swap = &model.SwapInfo{
-		Total: swapTotal,
-		Used:  swapUsed,
-		Free:  swapFree,
+	lines := strings.Split(string(data), "\n")
+	var swaps []model.SwapInfo
+
+	// Skip header line
+	for i := 1; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+
+		device := fields[0]
+		totalKB, _ := strconv.ParseUint(fields[2], 10, 64)
+		usedKB, _ := strconv.ParseUint(fields[3], 10, 64)
+
+		swaps = append(swaps, model.SwapInfo{
+			Device: device,
+			Total:  totalKB * 1024,
+			Used:   usedKB * 1024,
+		})
 	}
+
+	return swaps
 }
 
 func parseMemInfo(filePath string) map[string]uint64 {

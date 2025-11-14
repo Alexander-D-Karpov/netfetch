@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetFetch - System Info</title>
+    <style>
+        body {
+            background-color: black;
+            color: #d4d4d4;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            display: flex;
+            gap: 40px;
+            align-items: flex-start;
+        }
+        .logo {
+            white-space: pre;
+            font-size: 14px;
+            line-height: 1.4;
+            flex-shrink: 0;
+        }
+        .info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+        .info-line {
+            display: flex;
+            gap: 8px;
+            line-height: 1.4;
+            min-height: 1.4em;
+        }
+        .key {
+            color: #5ec9f2;
+            font-weight: bold;
+            min-width: 280px;
+            flex-shrink: 0;
+        }
+        .value {
+            color: #d4d4d4;
+        }
+        .separator {
+            color: #5ec9f2;
+            margin: 4px 0;
+        }
+        .header {
+            color: #5ec9f2;
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+        .color-good { color: #50fa7b; }
+        .color-warn { color: #ffb86c; }
+        .color-bad { color: #ff5555; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="logo">{{range $i, $line := .Logo}}{{if $i}}
+        {{end}}{{$line}}{{end}}</div>
+    <div class="info">
+        <div class="header">{{.Info.User}}@{{.Info.Host}}</div>
+        <div class="separator">-------------</div>
+
+        {{if isActive "os"}}
+        <div class="info-line">
+            <span class="key">OS:</span>
+            <span class="value">{{.Info.OS.Distro}} {{.Info.OS.Arch}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "kernel"}}
+        <div class="info-line">
+            <span class="key">Kernel:</span>
+            <span class="value">{{.Info.Kernel}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "uptime"}}
+        <div class="info-line">
+            <span class="key">Uptime:</span>
+            <span class="value">{{.Info.Uptime}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "packages"}}
+        <div class="info-line">
+            <span class="key">Packages:</span>
+            <span class="value">{{.Info.Packages}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "shell"}}
+        <div class="info-line">
+            <span class="key">Shell:</span>
+            <span class="value">{{.Info.Shell}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "resolution"}}
+        <div class="info-line">
+            <span class="key">Resolution:</span>
+            <span class="value">{{.Info.Resolution}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "de"}}
+        <div class="info-line">
+            <span class="key">DE:</span>
+            <span class="value">{{.Info.DE}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "wm"}}
+        <div class="info-line">
+            <span class="key">WM:</span>
+            <span class="value">{{.Info.WM}}</span>
+        </div>
+        {{if and (ne .Info.WMTheme "Unknown") (ne .Info.WMTheme "")}}
+        <div class="info-line">
+            <span class="key">WM Theme:</span>
+            <span class="value">{{.Info.WMTheme}}</span>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{if isActive "theme"}}
+        <div class="info-line">
+            <span class="key">Theme:</span>
+            <span class="value">{{.Info.Theme}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "icons"}}
+        <div class="info-line">
+            <span class="key">Icons:</span>
+            <span class="value">{{.Info.Icons}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "terminal"}}
+        <div class="info-line">
+            <span class="key">Terminal:</span>
+            <span class="value">{{.Info.Terminal}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "cpu"}}
+        {{if .Info.CPU}}
+        <div class="info-line">
+            <span class="key">CPU:</span>
+            <span class="value">{{.Info.CPU.Name}} ({{.Info.CPU.CoresLogical}}) @ {{formatFreq .Info.CPU.FrequencyMax}}</span>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{if isActive "gpu"}}
+        <div class="info-line">
+            <span class="key">GPU:</span>
+            <span class="value">{{.Info.GPU}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "memory"}}
+        {{if .Info.Memory}}
+        {{if gt .Info.Memory.Total 0}}
+        <div class="info-line">
+            <span class="key">Memory:</span>
+            <span class="value">
+                    <span class="{{memoryColorClass .Info.Memory}}">{{formatDiskSize .Info.Memory.Used}}</span>
+                    / {{formatDiskSize .Info.Memory.Total}}
+                    <span class="{{memoryColorClass .Info.Memory}}">({{memoryPercent .Info.Memory}}%)</span>
+                </span>
+        </div>
+        {{end}}
+        {{end}}
+        {{end}}
+
+        {{if isActive "disk"}}
+        {{if .Info.Disks}}
+        {{range $index, $disk := sortDisks .Info.Disks}}
+        <div class="info-line">
+            <span class="key">Disk ({{$disk.Mountpoint}}):</span>
+            <span class="value">
+                    <span class="{{diskColorClass $disk}}">{{formatDiskSize $disk.Used}}</span>
+                    / {{formatDiskSize $disk.Total}}
+                    <span class="{{diskColorClass $disk}}">({{printf "%.0f" $disk.UsedPercent}}%)</span>
+                    - {{$disk.FSType}}
+                </span>
+        </div>
+        {{end}}
+        {{else if .Info.Disk}}
+        {{if gt .Info.Disk.Total 0}}
+        <div class="info-line">
+            <span class="key">Disk ({{if .Info.Disk.Mountpoint}}{{.Info.Disk.Mountpoint}}{{else}}/{{end}}):</span>
+            <span class="value">
+                    <span class="{{diskColorClass .Info.Disk}}">{{formatDiskSize .Info.Disk.Used}}</span>
+                    / {{formatDiskSize .Info.Disk.Total}}
+                    <span class="{{diskColorClass .Info.Disk}}">({{printf "%.0f" .Info.Disk.UsedPercent}}%)</span>
+                    {{if .Info.Disk.FSType}}- {{.Info.Disk.FSType}}{{end}}
+                </span>
+        </div>
+        {{end}}
+        {{end}}
+        {{end}}
+
+        {{if isActive "swap"}}
+        {{if and .Info.Swap (gt .Info.Swap.Total 0)}}
+        <div class="info-line">
+            <span class="key">Swap:</span>
+            <span class="value">
+                    <span class="{{swapColorClass .Info.Swap}}">{{formatDiskSize .Info.Swap.Used}}</span>
+                    / {{formatDiskSize .Info.Swap.Total}}
+                    <span class="{{swapColorClass .Info.Swap}}">({{swapPercent .Info.Swap}}%)</span>
+                </span>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{if isActive "battery"}}
+        {{if .Info.Battery}}
+        <div class="info-line">
+            <span class="key">Battery:</span>
+            <span class="value">
+                    <span class="{{batteryColorClass .Info.Battery}}">{{printf "%.0f" .Info.Battery.Percentage}}%</span>
+                    ({{.Info.Battery.Status}})
+                </span>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{if isActive "locale"}}
+        <div class="info-line">
+            <span class="key">Locale:</span>
+            <span class="value">{{.Info.Locale}}</span>
+        </div>
+        {{end}}
+
+        {{if isActive "hostinfo"}}
+        {{if .Info.HostInfo}}
+        {{$hostStr := hostInfoStr .Info.HostInfo}}
+        {{if $hostStr}}
+        <div class="info-line">
+            <span class="key">Host:</span>
+            <span class="value">{{$hostStr}}</span>
+        </div>
+        {{end}}
+        {{end}}
+        {{end}}
+
+        {{if isActive "bios"}}
+        {{if .Info.BIOS}}
+        {{$biosStr := biosStr .Info.BIOS}}
+        {{if $biosStr}}
+        <div class="info-line">
+            <span class="key">BIOS:</span>
+            <span class="value">{{$biosStr}}</span>
+        </div>
+        {{end}}
+        {{end}}
+        {{end}}
+
+        {{if isActive "loginmanager"}}
+        {{if and .Info.LoginManager (ne .Info.LoginManager "Unknown")}}
+        <div class="info-line">
+            <span class="key">LM:</span>
+            <span class="value">{{.Info.LoginManager}}</span>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{if isActive "processes"}}
+        {{if gt .Info.Processes 0}}
+        <div class="info-line">
+            <span class="key">Processes:</span>
+            <span class="value">{{.Info.Processes}}</span>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{if isActive "cpuusage"}}
+        {{if gt .Info.CPUUsage 0}}
+        <div class="info-line">
+            <span class="key">CPU Usage:</span>
+            <span class="value">
+        <span class="{{cpuUsageClass .Info.CPUUsage}}">{{printf "%.1f" .Info.CPUUsage}}%</span>
+    </span>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{if isActive "brightness"}}
+        {{if .Info.Brightness}}
+        <div class="info-line">
+            <span class="key">Brightness:</span>
+            <span class="value">{{.Info.Brightness.Current}}%</span>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{if isActive "wifi"}}
+        {{if .Info.Wifi}}
+        {{$wifiStr := wifiStr .Info.Wifi}}
+        {{if $wifiStr}}
+        <div class="info-line">
+            <span class="key">WiFi:</span>
+            <span class="value">
+        {{$wifiStr}}
+        {{if gt .Info.Wifi.Strength 0}}
+        <span class="{{wifiStrengthClass .Info.Wifi}}">({{.Info.Wifi.Strength}}%)</span>
+        {{end}}
+    </span>
+        </div>
+        {{end}}
+        {{end}}
+        {{end}}
+
+        {{if isActive "publicip"}}
+        {{if .Info.PublicIP}}
+        <div class="info-line">
+            <span class="key">Public IP:</span>
+            <span class="value">{{.Info.PublicIP}}</span>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{if isActive "users"}}
+        {{if .Info.Users}}
+        {{range $index, $user := .Info.Users}}
+        <div class="info-line">
+            {{if eq $index 0}}
+            <span class="key">Users:</span>
+            {{else}}
+            <span class="key"></span>
+            {{end}}
+            <span class="value">
+        {{$user.Name}}{{if $user.Terminal}}@{{$user.Terminal}}{{end}}
+        {{if $user.LoginTime}}- {{$user.LoginTime}}{{end}}
+    </span>
+        </div>
+        {{end}}
+        {{end}}
+        {{end}}
+
+        {{if isActive "datetime"}}
+        {{if .Info.DateTime}}
+        <div class="info-line">
+            <span class="key">Date & Time:</span>
+            <span class="value">{{.Info.DateTime}}</span>
+        </div>
+        {{end}}
+        {{end}}
+    </div>
+</div>
+</body>
+</html>

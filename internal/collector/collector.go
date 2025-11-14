@@ -33,6 +33,12 @@ func (c *Collector) collectStaticInfo() {
 	if c.activeModules["os"] {
 		c.collectOS()
 	}
+	if c.activeModules["hostinfo"] {
+		c.collectHostInfo()
+	}
+	if c.activeModules["bios"] {
+		c.collectBIOS()
+	}
 	if c.activeModules["cpu"] {
 		c.collectCPU()
 	}
@@ -59,6 +65,9 @@ func (c *Collector) collectStaticInfo() {
 	}
 	if c.activeModules["cursor"] {
 		c.collectCursor()
+	}
+	if c.activeModules["loginmanager"] {
+		c.collectLoginManager()
 	}
 	c.collectShell()
 }
@@ -96,6 +105,27 @@ func (c *Collector) CollectDynamicInfo() {
 	}
 	if c.activeModules["locale"] {
 		c.collectLocale()
+	}
+	if c.activeModules["processes"] {
+		c.collectProcesses()
+	}
+	if c.activeModules["cpuusage"] {
+		c.collectCPUUsage()
+	}
+	if c.activeModules["publicip"] {
+		c.collectPublicIP()
+	}
+	if c.activeModules["wifi"] {
+		c.collectWifi()
+	}
+	if c.activeModules["datetime"] {
+		c.collectDateTime()
+	}
+	if c.activeModules["users"] {
+		c.collectUsers()
+	}
+	if c.activeModules["brightness"] {
+		c.collectBrightness()
 	}
 }
 

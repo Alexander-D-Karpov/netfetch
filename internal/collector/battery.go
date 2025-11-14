@@ -43,7 +43,10 @@ func (c *Collector) collectPowerAdapter() {
 func collectBatteryLinux(info *model.SystemInfo) {
 	batteryDirs, err := filepath.Glob("/sys/class/power_supply/BAT*")
 	if err != nil || len(batteryDirs) == 0 {
-		return
+		batteryDirs, err = filepath.Glob("/sys/class/power_supply/battery")
+		if err != nil || len(batteryDirs) == 0 {
+			return
+		}
 	}
 
 	for _, batteryPath := range batteryDirs {
@@ -65,10 +68,44 @@ func collectBatteryLinux(info *model.SystemInfo) {
 
 		status := strings.TrimSpace(string(statusData))
 
-		info.Battery = &model.BatteryInfo{
+		batteryInfo := &model.BatteryInfo{
 			Percentage: capacity,
-			Status:     status,
+			Status:     "",
 		}
+
+		if status == "Charging" {
+			batteryInfo.Status = "Charging"
+		} else if status == "Discharging" {
+			batteryInfo.Status = "Discharging"
+		} else if status == "Full" {
+			batteryInfo.Status = "Full"
+		} else if status == "Not charging" {
+			batteryInfo.Status = "Not Charging"
+		} else {
+			batteryInfo.Status = status
+		}
+
+		acOnline := false
+		adapterDirs, err := filepath.Glob("/sys/class/power_supply/AC*")
+		if err == nil && len(adapterDirs) > 0 {
+			onlineData, err := os.ReadFile(filepath.Join(adapterDirs[0], "online"))
+			if err == nil {
+				onlineStr := strings.TrimSpace(string(onlineData))
+				acOnline = onlineStr == "1"
+			}
+		}
+
+		if acOnline && batteryInfo.Status != "Full" {
+			if batteryInfo.Status != "" {
+				batteryInfo.Status += ", AC Connected"
+			} else {
+				batteryInfo.Status = "AC Connected"
+			}
+		} else if acOnline && batteryInfo.Status == "Full" {
+			batteryInfo.Status = "Full, AC Connected"
+		}
+
+		info.Battery = batteryInfo
 		return
 	}
 }
@@ -123,7 +160,16 @@ func collectBatteryDarwin(info *model.SystemInfo) {
 				}
 
 				if i+1 < len(parts) {
-					status = strings.Trim(parts[i+1], ";")
+					rawStatus := strings.Trim(parts[i+1], ";")
+					if rawStatus == "charging" {
+						status = "Charging, AC Connected"
+					} else if rawStatus == "discharging" {
+						status = "Discharging"
+					} else if rawStatus == "charged" {
+						status = "Full, AC Connected"
+					} else {
+						status = rawStatus
+					}
 				}
 				break
 			}
@@ -177,14 +223,16 @@ func collectBatteryWindows(info *model.SystemInfo) {
 		}
 	}
 
-	status := "Unknown"
+	status := ""
 	switch batteryStatus {
 	case 1:
 		status = "Discharging"
 	case 2:
-		status = "Charging"
+		status = "Charging, AC Connected"
 	case 3:
-		status = "Full"
+		status = "Full, AC Connected"
+	default:
+		status = "Unknown"
 	}
 
 	if percentage > 0 {
@@ -208,7 +256,7 @@ func collectPowerAdapterWindows(info *model.SystemInfo) {
 		if strings.HasPrefix(line, "BatteryStatus=") {
 			statusStr := strings.TrimPrefix(line, "BatteryStatus=")
 			if status, err := strconv.Atoi(statusStr); err == nil {
-				isConnected = (status == 2)
+				isConnected = status == 2 || status == 3
 			}
 		}
 	}
@@ -241,6 +289,14 @@ func collectBatteryBSD(info *model.SystemInfo) {
 		status = "Discharging"
 	case "2":
 		status = "Charging"
+	}
+
+	acOut, _ := exec.Command("sysctl", "-n", "hw.acpi.acline").Output()
+	acStr := strings.TrimSpace(string(acOut))
+	if acStr == "1" {
+		if status != "Full" {
+			status += ", AC Connected"
+		}
 	}
 
 	info.Battery = &model.BatteryInfo{

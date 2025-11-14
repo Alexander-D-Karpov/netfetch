@@ -26,6 +26,9 @@ func (c *Collector) collectOS() {
 	if osInfo == nil {
 		osInfo = make(map[string]string)
 	}
+	if getOrDefault(osInfo, "ID", "") == "ubuntu" {
+		detectUbuntuFlavor(c.info)
+	}
 
 	c.info.OS = &model.OSInfo{
 		Name:       getOrDefault(osInfo, "NAME", "Unknown"),
@@ -55,6 +58,40 @@ func parseOSRelease() map[string]string {
 		}
 	}
 	return nil
+}
+
+func detectUbuntuFlavor(info *model.SystemInfo) bool {
+	xdgConfigDirs := os.Getenv("XDG_CONFIG_DIRS")
+	if xdgConfigDirs == "" {
+		return false
+	}
+
+	flavorMap := map[string]struct {
+		name string
+		id   string
+	}{
+		"kde":      {"Kubuntu", "kubuntu"},
+		"plasma":   {"Kubuntu", "kubuntu"},
+		"kubuntu":  {"Kubuntu", "kubuntu"},
+		"xfce":     {"Xubuntu", "xubuntu"},
+		"xubuntu":  {"Xubuntu", "xubuntu"},
+		"lxqt":     {"Lubuntu", "lubuntu"},
+		"lubuntu":  {"Lubuntu", "lubuntu"},
+		"budgie":   {"Ubuntu Budgie", "ubuntu-budgie"},
+		"mate":     {"Ubuntu MATE", "ubuntu-mate"},
+		"cinnamon": {"Ubuntu Cinnamon", "ubuntu-cinnamon"},
+	}
+
+	for key, flavor := range flavorMap {
+		if strings.Contains(xdgConfigDirs, key) {
+			info.OS.Name = flavor.name
+			info.OS.Distro = flavor.id
+			info.OS.IDLike = "ubuntu"
+			return true
+		}
+	}
+
+	return false
 }
 
 func parseLSBRelease() map[string]string {

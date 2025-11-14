@@ -220,14 +220,22 @@ func countFlatpak() int {
 
 	systemPath := "/var/lib/flatpak/app"
 	if entries, err := os.ReadDir(systemPath); err == nil {
-		count += len(entries)
+		for _, entry := range entries {
+			if entry.IsDir() {
+				count++
+			}
+		}
 	}
 
 	homeDir := os.Getenv("HOME")
 	if homeDir != "" {
 		userPath := filepath.Join(homeDir, ".local/share/flatpak/app")
 		if entries, err := os.ReadDir(userPath); err == nil {
-			count += len(entries)
+			for _, entry := range entries {
+				if entry.IsDir() {
+					count++
+				}
+			}
 		}
 	}
 

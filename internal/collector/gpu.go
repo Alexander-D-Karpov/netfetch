@@ -233,9 +233,60 @@ func detectGPULspci() []string {
 }
 
 func cleanGPUName(name string) string {
-	name = regexp.MustCompile(`\[.*?\]`).ReplaceAllString(name, "")
+	parts := strings.Split(name, ":")
+	if len(parts) > 1 {
+		name = strings.TrimSpace(parts[1])
+	}
+
+	vendors := map[string]string{
+		"NVIDIA Corporation":           "NVIDIA",
+		"Advanced Micro Devices, Inc.": "AMD",
+		"Intel Corporation":            "Intel",
+		"ATI Technologies Inc":         "ATI",
+	}
+
+	for oldVendor, newVendor := range vendors {
+		if strings.HasPrefix(name, oldVendor) {
+			name = strings.TrimPrefix(name, oldVendor)
+			name = strings.TrimSpace(name)
+			name = newVendor + " " + name
+			break
+		}
+	}
+
+	if strings.Contains(name, "[") && strings.Contains(name, "]") {
+		start := strings.Index(name, "[")
+		end := strings.Index(name, "]")
+		if start < end {
+			prefix := strings.TrimSpace(name[:start])
+			bracketContent := strings.TrimSpace(name[start+1 : end])
+
+			if prefix == "" {
+				name = bracketContent
+			} else {
+				hasVendor := false
+				for _, vendor := range vendors {
+					if strings.Contains(prefix, vendor) || strings.Contains(bracketContent, vendor) {
+						hasVendor = true
+						break
+					}
+				}
+
+				if hasVendor && strings.Contains(bracketContent, prefix) {
+					name = bracketContent
+				} else if hasVendor {
+					name = prefix + " " + bracketContent
+				} else {
+					name = bracketContent
+				}
+			}
+		}
+	}
+
 	name = regexp.MustCompile(`\(.*?\)`).ReplaceAllString(name, "")
+	name = regexp.MustCompile(`\s+`).ReplaceAllString(name, " ")
 	name = strings.TrimSpace(name)
+
 	return name
 }
 

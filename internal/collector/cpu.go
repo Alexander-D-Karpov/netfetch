@@ -227,32 +227,75 @@ func extractFrequencyFromName(name string) uint32 {
 }
 
 func getCPUTemperatureLinux() float64 {
+	// Priority check: look for coretemp, k10temp, or cpu-specific sensors
 	hwmonFiles, _ := filepath.Glob("/sys/class/hwmon/hwmon*/temp*_input")
+
+	type hwmonTemp struct {
+		priority int
+		temp     float64
+	}
+
+	temps := make(map[string]hwmonTemp)
 
 	for _, file := range hwmonFiles {
 		nameFile := filepath.Join(filepath.Dir(file), "name")
-		if nameData, err := os.ReadFile(nameFile); err == nil {
-			name := strings.TrimSpace(string(nameData))
-			if strings.Contains(name, "coretemp") || strings.Contains(name, "k10temp") || strings.Contains(name, "cpu") {
-				if tempData, err := os.ReadFile(file); err == nil {
-					if temp, err := strconv.ParseInt(strings.TrimSpace(string(tempData)), 10, 64); err == nil {
-						return float64(temp) / 1000.0
+		nameData, err := os.ReadFile(nameFile)
+		if err != nil {
+			continue
+		}
+
+		name := strings.TrimSpace(string(nameData))
+		priority := 999
+
+		if strings.Contains(name, "coretemp") {
+			priority = 1 // Intel Core temp
+		} else if strings.Contains(name, "k10temp") {
+			priority = 1 // AMD K10 temp
+		} else if strings.Contains(name, "cpu") {
+			priority = 2
+		} else if strings.Contains(name, "zenpower") {
+			priority = 1 // AMD Zen
+		}
+
+		if priority < 999 {
+			tempData, err := os.ReadFile(file)
+			if err == nil {
+				temp, err := strconv.ParseInt(strings.TrimSpace(string(tempData)), 10, 64)
+				if err == nil && temp > 0 {
+					tempVal := float64(temp) / 1000.0
+					if existing, ok := temps[name]; !ok || tempVal > existing.temp {
+						temps[name] = hwmonTemp{priority: priority, temp: tempVal}
 					}
 				}
 			}
 		}
 	}
 
-	thermalFiles, _ := filepath.Glob("/sys/class/thermal/thermal_zone*/temp")
-	for _, file := range thermalFiles {
-		if tempData, err := os.ReadFile(file); err == nil {
-			if temp, err := strconv.ParseInt(strings.TrimSpace(string(tempData)), 10, 64); err == nil {
-				return float64(temp) / 1000.0
+	var bestTemp float64
+	bestPriority := 999
+
+	for _, t := range temps {
+		if t.priority < bestPriority {
+			bestPriority = t.priority
+			bestTemp = t.temp
+		}
+	}
+
+	// Fallback to thermal zones if no hwmon found
+	if bestTemp == 0.0 {
+		thermalFiles, _ := filepath.Glob("/sys/class/thermal/thermal_zone*/temp")
+		for _, file := range thermalFiles {
+			tempData, err := os.ReadFile(file)
+			if err == nil {
+				temp, err := strconv.ParseInt(strings.TrimSpace(string(tempData)), 10, 64)
+				if err == nil && temp > 0 {
+					return float64(temp) / 1000.0
+				}
 			}
 		}
 	}
 
-	return 0.0
+	return bestTemp
 }
 
 func detectCPUDarwin(cpu *model.CPUInfo) {
