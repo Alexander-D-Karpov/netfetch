@@ -263,7 +263,7 @@ func getDefaultConfig() *config.Config {
 			"de", "wm", "theme", "icons", "terminal", "cpu", "gpu",
 			"memory", "disk", "swap", "battery", "locale",
 		},
-		DefaultLogo: "arch",
+		DefaultLogo: "linux",
 		LogoDir:     "",
 	}
 }
